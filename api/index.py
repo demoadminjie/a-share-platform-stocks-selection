@@ -354,6 +354,10 @@ async def start_scan(config_request: ScanConfigRequest, background_tasks: Backgr
                     result=result_data
                 )
                 
+                # Get the updated task to include all fields
+                task = task_manager.get_task(task_id)
+                task_dict = task.to_dict() if task else None
+                
                 # Write result to JSON file with date in filename
                 # Get current date in YYYY-MM-DD format
                 current_date = datetime.now().strftime('%Y-%m-%d')
@@ -363,13 +367,13 @@ async def start_scan(config_request: ScanConfigRequest, background_tasks: Backgr
                 os.makedirs('data', exist_ok=True)
                 file_path = os.path.join('data', file_name)
                 
-                # Write result to file
+                # Write complete task information to file
                 try:
                     with open(file_path, 'w', encoding='utf-8') as f:
-                        json.dump(result_data, f, ensure_ascii=False, indent=2)
-                    print(f"{Fore.GREEN}Results successfully written to {file_path}{Style.RESET_ALL}")
+                        json.dump(task_dict, f, ensure_ascii=False, indent=2)
+                    print(f"{Fore.GREEN}Task results successfully written to {file_path}{Style.RESET_ALL}")
                 except Exception as e:
-                    print(f"{Fore.RED}Error writing results to file: {e}{Style.RESET_ALL}")
+                    print(f"{Fore.RED}Error writing task results to file: {e}{Style.RESET_ALL}")
 
         except Exception as e:
             print(f"{Fore.RED}Error in scan task: {e}{Style.RESET_ALL}")
@@ -662,6 +666,7 @@ async def get_latest_result():
             
         return {
             "status": "success",
+            "message": "获取数据成功",
             "data": sanitized_content,
             "filename": latest_filename,
             "date": latest_file_date.strftime('%Y-%m-%d')

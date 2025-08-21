@@ -73,7 +73,7 @@ docker run -d \
 
 if [ $? -eq 0 ]; then
     echo_log "容器启动成功!"
-    echo_log "服务已部署完成，请访问 http://43.153.175.167/:$HOST_PORT"
+    echo_log "服务已部署完成，请访问 http://43.153.175.167:$HOST_PORT"
 else
     echo_log "错误：容器启动失败"
     exit 1

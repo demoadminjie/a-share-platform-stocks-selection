@@ -10,6 +10,10 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 import sys
 import os
 
+import json
+from datetime import datetime
+import os
+
 # 添加当前目录到 Python 路径，以便导入模块
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -339,13 +343,31 @@ async def start_scan(config_request: ScanConfigRequest, background_tasks: Backgr
                         continue
 
                 # Update task with final result
+                result_data = [stock.model_dump() for stock in result_stocks]
                 task_manager.update_task(
                     task_id,
                     status=TaskStatus.COMPLETED,
                     progress=100,
                     message=f"Scan completed. Found {len(result_stocks)} platform stocks.",
-                    result=[stock.model_dump() for stock in result_stocks]
+                    result=result_data
                 )
+                
+                # Write result to JSON file with date in filename
+                # Get current date in YYYY-MM-DD format
+                current_date = datetime.now().strftime('%Y-%m-%d')
+                file_name = f"result-{current_date}.json"
+                
+                # Create data directory if it doesn't exist
+                os.makedirs('data', exist_ok=True)
+                file_path = os.path.join('data', file_name)
+                
+                # Write result to file
+                try:
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        json.dump(result_data, f, ensure_ascii=False, indent=2)
+                    print(f"{Fore.GREEN}Results successfully written to {file_path}{Style.RESET_ALL}")
+                except Exception as e:
+                    print(f"{Fore.RED}Error writing results to file: {e}{Style.RESET_ALL}")
 
         except Exception as e:
             print(f"{Fore.RED}Error in scan task: {e}{Style.RESET_ALL}")

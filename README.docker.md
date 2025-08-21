@@ -47,6 +47,42 @@ docker run -d -p 8001:8001 -v /path/to/logs:/app/logs --name stock-scanner-conta
 
 请确保主机上的`/path/to/logs`目录已存在并具有正确的权限。
 
+### 数据持久化配置
+
+为了确保股票扫描结果数据能够持续存储在服务器上，即使容器重启或重新创建后也不会丢失，你需要配置Docker数据卷挂载。
+
+#### 为什么需要数据持久化
+
+- 股票扫描结果文件（`result-YYYY-MM-DD.json`）保存在容器内的`/app/data`目录下
+- 默认情况下，容器内的数据在容器停止或删除后会丢失
+- 通过数据卷挂载，可以将数据持久化存储在服务器的物理磁盘上
+
+#### 配置方法
+
+运行容器时，使用`-v`参数将服务器上的文件夹挂载到容器内的`/app/data`目录：
+
+```bash
+docker run -d -p 8001:8001 -v /path/on/server/data:/app/data --name stock-scanner-container stock-platform-scanner
+```
+
+其中：
+- `/path/on/server/data`是服务器上用于存储数据的实际目录路径
+- `/app/data`是容器内的目标路径，已在Dockerfile中预先配置
+
+#### 注意事项
+
+1. 请确保服务器上的`/path/on/server/data`目录已存在
+2. 为了避免权限问题，建议将服务器目录的权限设置为可读写：
+   ```bash
+   mkdir -p /path/on/server/data
+   chmod 777 /path/on/server/data
+   ```
+3. 如果你同时需要持久化日志和数据，可以在同一命令中指定多个挂载点：
+   ```bash
+   docker run -d -p 8001:8001 -v /path/on/server/logs:/app/logs -v /path/on/server/data:/app/data --name stock-scanner-container stock-platform-scanner
+   ```
+4. 在生产环境中，建议使用命名卷（named volumes）而不是主机路径挂载，以便更好地管理数据
+
 ## 容器管理命令
 
 ### 查看容器状态

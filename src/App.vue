@@ -508,7 +508,7 @@
                 扫描结果
                 <span class="ml-2 px-2 py-0.5 rounded-full text-xs bg-primary opacity-20 text-primary">{{
                   platformStocks.length
-                }} 只</span>
+                  }} 只</span>
               </h2>
               <div class="flex space-x-2">
                 <button class="btn btn-secondary text-xs py-1 px-2">
@@ -557,7 +557,7 @@
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-border">
-                  <tr v-for="stock in platformStocks" :key="stock.code">
+                  <tr v-for="stock in paginatedStocks" :key="stock.code">
                     <td class="px-4 py-3 whitespace-nowrap text-sm font-medium">{{ stock.code }}</td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm">{{ stock.name }}</td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm">
@@ -709,18 +709,50 @@
                   </tr>
                 </tbody>
               </table>
+
+              <!-- 分页控制器 -->
+              <div class="flex items-center justify-between px-4 py-3 border-t border-border">
+                <div class="flex items-center">
+                  <span class="text-sm text-muted-foreground">
+                    每页显示
+                  </span>
+                  <select v-model="pageSize" class="mx-2 p-1 bg-background border border-border rounded text-sm"
+                    @change="changePageSize(pageSize)">
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                  </select>
+                  <span class="text-sm text-muted-foreground">
+                    条数据，共 {{ platformStocks.length }} 条
+                  </span>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <button class="btn btn-secondary text-xs py-1 px-2" @click="prevPage" :disabled="currentPage <= 1">
+                    <i class="fas fa-chevron-left mr-1"></i> 上一页
+                  </button>
+                  <div class="flex items-center">
+                    <span class="mx-2 text-sm text-muted-foreground">
+                      第 {{ currentPage }} 页 / 共 {{ totalPages }} 页
+                    </span>
+                  </div>
+                  <button class="btn btn-secondary text-xs py-1 px-2" @click="nextPage"
+                    :disabled="currentPage >= totalPages">
+                    下一页 <i class="fas fa-chevron-right ml-1"></i>
+                  </button>
+                </div>
+              </div>
             </div>
 
             <!-- 移动端卡片视图 -->
             <div class="md:hidden">
-              <div v-for="stock in platformStocks" :key="stock.code"
+              <div v-for="stock in paginatedStocks" :key="stock.code"
                 class="mb-4 border border-border rounded-lg overflow-hidden bg-card">
                 <!-- 股票基本信息 -->
                 <div class="p-3 border-b border-border bg-muted/20">
                   <div class="flex justify-between items-center">
                     <div>
                       <div class="font-medium">{{ stock.name }} <span class="text-muted-foreground">{{ stock.code
-                      }}</span></div>
+                          }}</span></div>
                       <div class="mt-1">
                         <span class="px-2 py-0.5 rounded-full text-xs bg-primary/20 text-primary">
                           {{ stock.industry || '未知行业' }}
@@ -819,6 +851,35 @@
                   </div>
                 </div>
               </div>
+
+              <!-- 移动端分页控制器 -->
+              <div class="flex flex-col space-y-3 my-4 px-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm text-muted-foreground">
+                    每页 {{ pageSize }} 条，共 {{ platformStocks.length }} 条
+                  </span>
+                  <div class="flex items-center space-x-1">
+                    <button class="btn btn-secondary text-xs py-1 px-2" @click="prevPage" :disabled="currentPage <= 1">
+                      <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <span class="mx-2 text-sm text-muted-foreground">
+                      {{ currentPage }}/{{ totalPages }}
+                    </span>
+                    <button class="btn btn-secondary text-xs py-1 px-2" @click="nextPage"
+                      :disabled="currentPage >= totalPages">
+                      <i class="fas fa-chevron-right"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="flex justify-center space-x-2">
+                  <select v-model="pageSize" class="p-1 bg-background border border-border rounded text-sm"
+                    @change="changePageSize(pageSize)">
+                    <option value="5">5条/页</option>
+                    <option value="10">10条/页</option>
+                    <option value="20">20条/页</option>
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
         </transition>
@@ -909,6 +970,45 @@ const hasSearched = ref(false); // Track if a search has been performed
 const isDarkMode = ref(false); // 暗色模式状态
 const windowWeights = ref({}); // 窗口权重
 const expandedReasons = ref({}); // 跟踪每个股票的选择理由是否展开
+
+// 分页相关状态
+const currentPage = ref(1);
+const pageSize = ref(10);
+const totalPages = computed(() => Math.ceil(platformStocks.value.length / pageSize.value));
+const paginatedStocks = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  const end = start + pageSize.value;
+  return platformStocks.value.slice(start, end);
+});
+
+// 分页控制函数
+function goToPage (page) {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page;
+    // 重置选择理由展开状态
+    expandedReasons.value = {};
+  }
+}
+
+function nextPage () {
+  if (currentPage.value < totalPages.value) {
+    goToPage(currentPage.value + 1);
+  }
+}
+
+function prevPage () {
+  if (currentPage.value > 1) {
+    goToPage(currentPage.value - 1);
+  }
+}
+
+function changePageSize (size) {
+  pageSize.value = size;
+  // 调整当前页，确保不超出总页数
+  if (currentPage.value > totalPages.value) {
+    currentPage.value = totalPages.value || 1;
+  }
+}
 
 // 窗口期预设
 const windowPresets = [
@@ -1572,6 +1672,9 @@ function startPolling (taskId) {
 
           platformStocks.value = processedResults;
           console.log('处理后的平台股票数据:', platformStocks.value);
+
+          // 重置分页状态
+          currentPage.value = 1;
         } else {
           console.error("Task completed but no valid result:", taskData);
           error.value = "任务完成但未返回有效数据。";
@@ -1597,6 +1700,7 @@ async function fetchPlatformStocks () {
   platformStocks.value = []; // Clear previous results
   expandedReasons.value = {}; // 重置所有选择理由为收起状态
   hasSearched.value = true; // Mark that a search was initiated
+  currentPage.value = 1; // 重置到第一页
 
   // Reset task status
   taskStatus.value = 'pending';
@@ -1707,6 +1811,8 @@ async function fetchPlatformStocksLegacy () {
   error.value = null;
   platformStocks.value = [];
   hasSearched.value = true;
+  currentPage.value = 1; // 重置到第一页
+  expandedReasons.value = {}; // 重置所有选择理由为收起状态
 
   // Basic validation
   if (!parsedWindows.value.length) {

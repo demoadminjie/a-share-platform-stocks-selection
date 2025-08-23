@@ -11,9 +11,10 @@ export default defineConfig({
     },
   },
   server: {
+    host: "0.0.0.0",
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8001",
+        target: process.env.VITE_API_URL || "http://127.0.0.1:8001",
         changeOrigin: true,
         rewrite: (path) => path,
         configure: (proxy, options) => {

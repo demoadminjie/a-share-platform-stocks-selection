@@ -1,0 +1,53 @@
+# 排除Git相关文件
+.git
+.gitignore
+
+# 排除虚拟环境
+venv
+env
+*.venv
+
+# 排除IDE相关文件
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# 排除Python缓存文件
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# 排除操作系统文件
+.DS_Store
+Thumbs.db
+
+# 排除日志文件
+*.log
+
+# 排除数据文件
+*.csv
+*.json
+*.db
+
+# 排除构建文件
+build
+dist
+*.egg-info
+
+# 排除文档文件
+docs/
+
+# 排除前端相关文件（如果有的话）
+/src/
+/public/
+index.html
+package-lock.json
+package.json
+tailwind.config.js
+vite.config.js
+
+# 保留必要的API文件
+!/api/

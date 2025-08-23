@@ -10,6 +10,12 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 import sys
 import os
 
+import json
+import re
+import math
+from datetime import datetime
+from collections.abc import Mapping, Iterable
+
 # 添加当前目录到 Python 路径，以便导入模块
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -339,13 +345,35 @@ async def start_scan(config_request: ScanConfigRequest, background_tasks: Backgr
                         continue
 
                 # Update task with final result
+                result_data = [stock.model_dump() for stock in result_stocks]
                 task_manager.update_task(
                     task_id,
                     status=TaskStatus.COMPLETED,
                     progress=100,
                     message=f"Scan completed. Found {len(result_stocks)} platform stocks.",
-                    result=[stock.model_dump() for stock in result_stocks]
+                    result=result_data
                 )
+                
+                # Get the updated task to include all fields
+                task = task_manager.get_task(task_id)
+                task_dict = task.to_dict() if task else None
+                
+                # Write result to JSON file with date in filename
+                # Get current date in YYYY-MM-DD format
+                current_date = datetime.now().strftime('%Y-%m-%d')
+                file_name = f"result-{current_date}.json"
+                
+                # Create data directory if it doesn't exist
+                os.makedirs('data', exist_ok=True)
+                file_path = os.path.join('data', file_name)
+                
+                # Write complete task information to file
+                try:
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        json.dump(task_dict, f, ensure_ascii=False, indent=2)
+                    print(f"{Fore.GREEN}Task results successfully written to {file_path}{Style.RESET_ALL}")
+                except Exception as e:
+                    print(f"{Fore.RED}Error writing task results to file: {e}{Style.RESET_ALL}")
 
         except Exception as e:
             print(f"{Fore.RED}Error in scan task: {e}{Style.RESET_ALL}")
@@ -564,3 +592,94 @@ async def test_scan(config_request: ScanConfigRequest):
     return [result_stock]
 
 # 注意：我们已经有了根端点 (/), 不需要额外的 /api 端点
+
+
+@app.get("/api/latest-result")
+async def get_latest_result():
+    """
+    Get the content of the most recent result file in the data directory.
+    The file naming format is 'result-YYYY-MM-DD.json'.
+    """
+
+    # Helper function to convert non-JSON compliant values
+    def sanitize_json(data):
+        """Recursively sanitize data to be JSON compliant."""
+        if isinstance(data, float):
+            # Replace NaN, Inf, -Inf with None
+            if math.isnan(data) or math.isinf(data):
+                return None
+        elif isinstance(data, Mapping):
+            # Process dictionaries
+            return {k: sanitize_json(v) for k, v in data.items()}
+        elif isinstance(data, Iterable) and not isinstance(data, (str, bytes)):
+            # Process lists and other iterables (excluding strings)
+            return [sanitize_json(item) for item in data]
+        return data
+
+    # Define the data directory path
+    data_dir = 'data'
+    
+    # Check if data directory exists
+    if not os.path.exists(data_dir):
+        return {
+            "status": "error",
+            "message": "Data directory does not exist",
+            "code": 404
+        }
+    
+    # Get all files in the data directory matching the pattern
+    file_pattern = r"^result-(\d{4}-\d{2}-\d{2})\.json$"
+    files = []
+    
+    for filename in os.listdir(data_dir):
+        match = re.match(file_pattern, filename)
+        if match:
+            date_str = match.group(1)
+            try:
+                # Parse the date to verify it's valid
+                file_date = datetime.strptime(date_str, '%Y-%m-%d')
+                files.append((file_date, filename))
+            except ValueError:
+                # Skip files with invalid date format
+                continue
+    
+    # Check if any valid files were found
+    if not files:
+        return {
+            "status": "error",
+            "message": "No result files found in data directory",
+            "code": 404
+        }
+    
+    # Sort files by date (newest first) and get the most recent one
+    files.sort(reverse=True, key=lambda x: x[0])
+    latest_file_date, latest_filename = files[0]
+    file_path = os.path.join(data_dir, latest_filename)
+    
+    try:
+        # Read and return the content of the latest file
+        with open(file_path, 'r', encoding='utf-8') as f:
+            file_content = json.load(f)
+            
+        # Sanitize the file content to make it JSON compliant
+        sanitized_content = sanitize_json(file_content)
+            
+        return {
+            "status": "success",
+            "message": "获取数据成功",
+            "data": sanitized_content,
+            "filename": latest_filename,
+            "date": latest_file_date.strftime('%Y-%m-%d')
+        }
+    except json.JSONDecodeError:
+        return {
+            "status": "error",
+            "message": f"Failed to parse JSON content from {latest_filename}",
+            "code": 500
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to read file {latest_filename}: {str(e)}",
+            "code": 500
+        }

@@ -170,13 +170,14 @@ onUnmounted(() => {
 }
 
 .tooltip-inner {
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255);
   border-left: 3px solid hsl(var(--primary));
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  z-index: 9;
 }
 
 .dark .tooltip-inner {
-  background-color: rgba(30, 41, 59, 0.75);
+  background-color: rgba(30, 41, 59);
 }
 
 .tooltip-title {

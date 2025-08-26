@@ -19,8 +19,8 @@ from collections.abc import Mapping, Iterable
 
 file_path = '../data/cache/stocks'
 
-def combine_stock_list() -> List[Dict[str, any]]:
-  stock_list: List[Dict[str, Dict[str]]] = [];
+def combine_stock_list() -> List[List[str]]:
+  stock_list: List[List[str]] = [];
   
   # 获取当前文件所在目录
   current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -47,11 +47,9 @@ def combine_stock_list() -> List[Dict[str, any]]:
         end_date = match.group(3)
         
         # 添加到stock_list
-        stock_list.append({stock_id: [start_date, end_date]})
+        stock_list.append([stock_id, start_date, end_date])
   
   return stock_list
-
-# print(f'combine_stock_list {combine_stock_list()}')
 
 def scan_stock_item(code: str, start_data: str, end_data: str) -> Optional[pd.DataFrame]:
     """
@@ -97,6 +95,7 @@ def scan_stock_item(code: str, start_data: str, end_data: str) -> Optional[pd.Da
 
 # 示例调用 - 仅在直接运行此脚本时执行
 if __name__ == "__main__":
+    # print(f'combine_stock_list {combine_stock_list()}')
     result = scan_stock_item('sh.600000', '2020-08-27', '2025-08-26')
     print(f'scan_stock_item 结果: {result.head() if isinstance(result, pd.DataFrame) else result}')
 

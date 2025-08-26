@@ -13,7 +13,7 @@ import os
 import json
 import re
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections.abc import Mapping, Iterable
 
 # 添加当前目录到 Python 路径，以便导入模块
@@ -24,14 +24,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
     from api.config import ScanConfig
     from api.task_manager import task_manager, TaskStatus
-    from api.data_fetcher import fetch_stock_basics, fetch_industry_data, BaostockConnectionManager
+    from api.data_fetcher import fetch_stock_basics, fetch_industry_data, BaostockConnectionManager, fetch_kline_data
     from api.platform_scanner import prepare_stock_list, scan_stocks
     from api.case_api import router as case_router
 except ImportError:
     # 如果绝对导入失败，尝试相对导入（本地开发环境）
     from .config import ScanConfig
     from .task_manager import task_manager, TaskStatus
-    from .data_fetcher import fetch_stock_basics, fetch_industry_data, BaostockConnectionManager
+    from .data_fetcher import fetch_stock_basics, fetch_industry_data, BaostockConnectionManager, fetch_kline_data
     from .platform_scanner import prepare_stock_list, scan_stocks
     from .case_api import router as case_router
 
@@ -213,6 +213,155 @@ async def root():
     }
 
 
+@app.post("/api/stocks/kline/history", response_model=TaskCreationResponse)
+async def fetch_all_stocks_kline_history(background_tasks: BackgroundTasks):
+    """
+    Start a background task to fetch 5-year daily K-line data for all eligible stocks.
+    Eligible stocks are those with code starting with 'sh.60', 'sz.00', or 'sz.30' and status=1.
+    Data will be saved in data/cache/stocks directory.
+    """
+    # Initialize colorama for colored console output
+    colorama.init()
+    
+    print(f"{Fore.CYAN}======================================{Style.RESET_ALL}")
+    print(f"{Fore.CYAN}Starting 5-year K-line data fetch task{Style.RESET_ALL}")
+    print(f"{Fore.CYAN}======================================{Style.RESET_ALL}")
+    
+    # Create a new task
+    task_id = task_manager.create_task()
+    
+    # Start the K-line data fetch in the background
+    def run_kline_fetch_task():
+        try:
+            # Update task status
+            task_manager.update_task(
+                task_id,
+                progress=0,
+                message="Starting K-line data fetch task"
+            )
+            
+            # Fetch stock basics
+            with BaostockConnectionManager():
+                stock_basics_df = fetch_stock_basics()
+                
+                # Update task status
+                task_manager.update_task(
+                    task_id,
+                    progress=10,
+                    message="Fetched stock basic information"
+                )
+                
+                # Filter stocks based on criteria
+                # Criteria: code starts with 'sh.60', 'sz.00', or 'sz.30' and status=1
+                filtered_stocks = []
+                
+                # Iterate through stock basics to filter
+                for _, row in stock_basics_df.iterrows():
+                    code = row['code']
+                    status = row['status']
+                    
+                    # Check if stock meets criteria
+                    if (status == '1' and 
+                        (code.startswith('sh.60') or 
+                         code.startswith('sz.00') or 
+                         code.startswith('sz.30'))):
+                        filtered_stocks.append({
+                            'code': code,
+                            'name': row['code_name']
+                        })
+                
+                # Calculate 5 years ago from today
+                end_date = datetime.now().strftime('%Y-%m-%d')
+                start_date = (datetime.now() - timedelta(days=5*365)).strftime('%Y-%m-%d')
+                
+                # Create cache directory
+                stocks_cache_dir = os.path.join('data', 'cache', 'stocks')
+                os.makedirs(stocks_cache_dir, exist_ok=True)
+                
+                total_stocks = len(filtered_stocks)
+                print(f"{Fore.GREEN}Found {total_stocks} eligible stocks to fetch K-line data for{Style.RESET_ALL}")
+                
+                # Update task status
+                task_manager.update_task(
+                    task_id,
+                    progress=20,
+                    message=f"Found {total_stocks} eligible stocks to fetch K-line data for"
+                )
+                
+                # Fetch K-line data for each stock
+                success_count = 0
+                failure_count = 0
+                
+                for i, stock in enumerate(filtered_stocks):
+                    try:
+                        # Fetch K-line data
+                        kline_df = fetch_kline_data(
+                            code=stock['code'],
+                            start_date=start_date,
+                            end_date=end_date
+                        )
+                        
+                        if not kline_df.empty:
+                            # Save K-line data
+                            stock_file = os.path.join(
+                                stocks_cache_dir, 
+                                f"{stock['code']}_{start_date}-{end_date}.pkl"
+                            )
+                            kline_df.to_pickle(stock_file)
+                            
+                            # Also save as CSV for easier inspection
+                            csv_file = os.path.join(
+                                stocks_cache_dir, 
+                                f"{stock['code']}_{start_date}-{end_date}.csv"
+                            )
+                            kline_df.to_csv(csv_file, index=False, encoding='utf-8')
+                            
+                            success_count += 1
+                            print(f"{Fore.GREEN}Successfully fetched K-line data for {stock['code']} ({stock['name']}){Style.RESET_ALL}")
+                        else:
+                            failure_count += 1
+                            print(f"{Fore.YELLOW}No data returned for {stock['code']} ({stock['name']}){Style.RESET_ALL}")
+                        
+                    except Exception as e:
+                        failure_count += 1
+                        print(f"{Fore.RED}Failed to fetch K-line data for {stock['code']} ({stock['name']}): {e}{Style.RESET_ALL}")
+                    
+                    # Update progress
+                    progress = 20 + int((i + 1) / total_stocks * 70)  # 20-90% for data fetching
+                    task_manager.update_task(
+                        task_id,
+                        progress=progress,
+                        message=f"Fetched data for {i+1}/{total_stocks} stocks ({success_count} success, {failure_count} failed)"
+                    )
+                
+                # Final update
+                task_manager.update_task(
+                    task_id,
+                    progress=100,
+                    message=f"K-line data fetch completed: {success_count} stocks successfully fetched, {failure_count} failed",
+                    status=TaskStatus.COMPLETED
+                )
+                
+        except Exception as e:
+            error_message = f"Error during K-line data fetch: {str(e)}"
+            print(f"{Fore.RED}{error_message}{Style.RESET_ALL}")
+            traceback.print_exc()
+            
+            task_manager.update_task(
+                task_id,
+                status=TaskStatus.FAILED,
+                error=error_message
+            )
+    
+    # Add task to background
+    background_tasks.add_task(run_kline_fetch_task)
+    
+    return {
+        "task_id": task_id,
+        "message": "Task started: fetching 5-year K-line data for all eligible stocks"
+    }
+
+
 @app.post("/api/scan/start", response_model=TaskCreationResponse)
 async def start_scan(config_request: ScanConfigRequest, background_tasks: BackgroundTasks):
     """
@@ -241,6 +390,22 @@ async def start_scan(config_request: ScanConfigRequest, background_tasks: Backgr
             # Fetch stock basics
             with BaostockConnectionManager():
                 stock_basics_df = fetch_stock_basics()
+
+                print(f"stock_basics_df: {stock_basics_df}")
+
+                # Save stock basics data to cache
+                cache_dir = os.path.join('data', 'cache')
+                os.makedirs(cache_dir, exist_ok=True)
+                
+                # Create timestamped filename
+                pickle_file = os.path.join(cache_dir, f'stock_basics.pkl')
+                csv_file = os.path.join(cache_dir, f'stock_basics.csv')
+                
+                # Save data in both pickle and CSV formats
+                stock_basics_df.to_pickle(pickle_file)
+                stock_basics_df.to_csv(csv_file, index=False, encoding='utf-8')
+                
+                print(f"{Fore.GREEN}Stock basics data saved to cache: {pickle_file} and {csv_file}{Style.RESET_ALL}")
 
                 # Update task status
                 task_manager.update_task(

@@ -3,7 +3,7 @@ from colorama import Fore, Style
 import colorama  # For colored console output
 import traceback
 import pandas as pd
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 from pydantic import BaseModel, Field, RootModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -27,6 +27,7 @@ try:
     from api.data_fetcher import fetch_stock_basics, fetch_industry_data, BaostockConnectionManager, fetch_kline_data
     from api.platform_scanner import prepare_stock_list, scan_stocks
     from api.case_api import router as case_router
+    from api.excalibur.excutor import scan_test_stock
 except ImportError:
     # 如果绝对导入失败，尝试相对导入（本地开发环境）
     from .config import ScanConfig
@@ -34,6 +35,7 @@ except ImportError:
     from .data_fetcher import fetch_stock_basics, fetch_industry_data, BaostockConnectionManager, fetch_kline_data
     from .platform_scanner import prepare_stock_list, scan_stocks
     from .case_api import router as case_router
+    from .excalibur.excutor import scan_test_stock
 
 
 # Define request body model using Pydantic
@@ -211,6 +213,10 @@ async def root():
         "message": "Stock Platform Scanner API is running",
         "version": "1.0.0"
     }
+
+@app.get("/api/stock/platform/{code}")
+async def scan_stock_platform(code: str, start_date: Union[str, None] = None, end_date: Union[str, None] = None):
+    return scan_test_stock(code, start_date= start_date or '2020-08-27', end_date= end_date or '2025-08-25')
 
 
 @app.post("/api/stocks/kline/history", response_model=TaskCreationResponse)

@@ -94,12 +94,12 @@ def detect_platform_period(df: pd.DataFrame, window: int = 20,
     
     return result_df
 
-def scan_test_stock(code, startDate, endDate):
+def scan_test_stock(code, start_date, end_date):
   print(f"{Fore.CYAN}======================================{Style.RESET_ALL}")
   print(f"{Fore.CYAN}Starting {code} scan{Style.RESET_ALL}")
   print(f"{Fore.CYAN}======================================{Style.RESET_ALL}")
 
-  stock_data = scan_stock_item(code, start_date=startDate, end_date=endDate)
+  stock_data = scan_stock_item(code, start_date=start_date, end_date=end_date)
   
   if stock_data is not None and not stock_data.empty:
       # 检测平台期并添加status字段
@@ -118,8 +118,8 @@ def scan_test_stock(code, startDate, endDate):
       # 准备返回结果
       result = {
           "code": code,
-          "start_date": startDate,
-          "end_date": endDate,
+          "start_date": start_date,
+          "end_date": end_date,
           "total_days": total_days,
           "platform_days": int(platform_days),
           "platform_percentage": round(platform_percentage, 2),
@@ -152,7 +152,7 @@ def scan_test_stock(code, startDate, endDate):
       print(f"\n{Fore.GREEN}最近5天数据样例（含平台期状态）:{Style.RESET_ALL}")
       print(json.dumps(result["data"][-5:], ensure_ascii=False, indent=2))
       
-      return result
+      return {"code": 200,  "result": result }
   else:
       print(f"{Fore.RED}未获取到有效的股票数据{Style.RESET_ALL}")
       return {"error": "未获取到有效的股票数据", "code": code}

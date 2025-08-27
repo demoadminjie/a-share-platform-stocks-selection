@@ -27,6 +27,9 @@ def calculate_price_features(df: pd.DataFrame, window: int) -> Dict[str, float]:
         }
     
     # Get the most recent window of data
+    # 从传入的 DataFrame `df` 中选取最后 `window` 数量的行，创建一个新的 DataFrame。
+    # `iloc[-window:]` 表示从倒数第 `window` 行开始一直到最后一行。
+    # `.copy()` 方法用于创建一个独立的数据副本，避免后续操作影响原始 DataFrame。
     recent_df = df.iloc[-window:].copy()
     
     # Calculate price range (box)
@@ -43,6 +46,7 @@ def calculate_price_features(df: pd.DataFrame, window: int) -> Dict[str, float]:
             ma_values.append(ma.iloc[-1])
     
     if len(ma_values) >= 2:
+        # 计算 ma_values 列表中元素的标准差，该值反映了不同周期移动平均线的离散程度
         ma_std = np.std(ma_values)
         ma_mean = np.mean(ma_values)
         ma_diff = ma_std / ma_mean if ma_mean > 0 else float('inf')

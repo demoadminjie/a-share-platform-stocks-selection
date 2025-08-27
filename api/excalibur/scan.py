@@ -51,7 +51,7 @@ def combine_stock_list() -> List[List[str]]:
   
   return stock_list
 
-def scan_stock_item(code: str, start_data: str, end_data: str) -> Optional[pd.DataFrame]:
+def scan_stock_item(code: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
     """
     从pkl文件中读取指定股票代码和日期范围的股票数据
     
@@ -69,7 +69,7 @@ def scan_stock_item(code: str, start_data: str, end_data: str) -> Optional[pd.Da
     stocks_dir = os.path.join(current_dir, file_path)
     
     # 构建文件名（根据之前看到的格式：sh.605080_2020-08-27-2025-08-26.pkl）
-    filename = f"{code}_{start_data}-{end_data}.pkl"
+    filename = f"{code}_{start_date}-{end_date}.pkl"
     file_path_full = os.path.join(stocks_dir, filename)
     
     # 检查文件是否存在

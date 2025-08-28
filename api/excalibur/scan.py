@@ -19,6 +19,9 @@ from collections.abc import Mapping, Iterable
 
 file_path = '../data/cache/stocks'
 
+if os.path.exists('/app/api'):
+    file_path = '/app/data/cache/stocks'
+
 def combine_stock_list() -> List[List[str]]:
   stock_list: List[List[str]] = [];
   

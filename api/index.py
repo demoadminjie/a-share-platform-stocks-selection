@@ -277,8 +277,8 @@ async def fetch_all_stocks_kline_history(background_tasks: BackgroundTasks):
                         })
                 
                 # Calculate 5 years ago from today
-                end_date = datetime.now().strftime('%Y-%m-%d')
-                start_date = (datetime.now() - timedelta(days=5*365)).strftime('%Y-%m-%d')
+                end_date = '2025-08-27' or datetime.now().strftime('%Y-%m-%d')
+                start_date = '2020-08-28' or (datetime.now() - timedelta(days=5*365)).strftime('%Y-%m-%d')
                 
                 # Create cache directory
                 stocks_cache_dir = os.path.join('data', 'cache', 'stocks')

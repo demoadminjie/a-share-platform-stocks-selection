@@ -14,27 +14,22 @@ try:
   from api.excalibur.scan import combine_stock_list, scan_stock_item
   from api.excalibur.config import DEFAULT_CONFIG
   from api.excalibur.technical import calculate_ma
+  from api.analyzers.combined_analyzer import analyze_stock
+  from api.config import ScanConfig
 except ImportError:
   # 如果绝对导入失败，尝试相对导入（本地开发环境）
   from .scan import combine_stock_list, scan_stock_item
   from .config import DEFAULT_CONFIG
   from .technical import calculate_ma
+  from ..config import ScanConfig
+  from ..analyzers.combined_analyzer import analyze_stock
 
-def detect_platform_period(df: pd.DataFrame, window: int = 20, 
-                           box_threshold: float = 0.05, 
-                           ma_diff_threshold: float = 0.01, 
-                           volatility_threshold: float = 0.02, 
-                           volume_factor: float = 0.7) -> pd.DataFrame:
+def detect_platform_period(df: pd.DataFrame) -> pd.DataFrame:
     """
     检测股票是否处于平台期，并为每条数据添加平台期状态标识
     
     Args:
         df: 包含股票数据的DataFrame，需包含date,open,high,low,close,volume列
-        window: 检测平台期的窗口大小（天数）
-        box_threshold: 价格区间阈值，超过此值不认为是平台期
-        ma_diff_threshold: 均线收敛阈值，超过此值不认为是平台期
-        volatility_threshold: 波动率阈值，超过此值不认为是平台期
-        volume_factor: 成交量萎缩因子，低于此因子认为成交量萎缩
         
     Returns:
         添加了status列的DataFrame，status=1表示处于平台期，status=0表示不处于平台期
@@ -42,55 +37,95 @@ def detect_platform_period(df: pd.DataFrame, window: int = 20,
     result_df = df.copy()
     result_df['status'] = 0  # 默认为非平台期
     
-    if len(result_df) < window:
+    # 设置最小窗口大小，需要足够的历史数据来进行分析
+    min_window = 120  # 使用较大的窗口以获取更可靠的结果
+    
+    if len(result_df) < min_window:
         return result_df
     
-    # 计算价格特征和均线
-    result_df = calculate_ma(result_df, periods=[5, 10, 20])
-    
-    # 计算滚动窗口内的价格区间
-    result_df['rolling_high'] = result_df['high'].rolling(window=window).max()
-    result_df['rolling_low'] = result_df['low'].rolling(window=window).min()
-    result_df['box_range'] = (result_df['rolling_high'] - result_df['rolling_low']) / result_df['rolling_low']
-    
-    # 计算均线收敛程度
-    def calculate_ma_diff(row):
-        mas = [row.get(f'ma{period}', np.nan) for period in [5, 10, 20]]
-        mas = [ma for ma in mas if not pd.isna(ma)]
-        if len(mas) >= 2:
-            return np.std(mas) / np.mean(mas)
-        return np.nan
-    
-    result_df['ma_diff'] = result_df.apply(calculate_ma_diff, axis=1)
-    
-    # 计算价格波动率（收益率标准差）
-    result_df['returns'] = result_df['close'].pct_change()
-    result_df['volatility'] = result_df['returns'].rolling(window=window).std()
-    
-    # 计算成交量变化（当前窗口与前一窗口对比）
-    result_df['avg_volume'] = result_df['volume'].rolling(window=window).mean()
-    result_df['prev_avg_volume'] = result_df['avg_volume'].shift(window)
-    result_df['volume_ratio'] = result_df['avg_volume'] / result_df['prev_avg_volume']
-    
-    # 判断平台期条件
-    # 1. 价格区间小于阈值
-    # 2. 均线收敛程度小于阈值
-    # 3. 波动率小于阈值
-    # 4. 成交量萎缩（当前成交量小于前一时期成交量的一定比例）
-    platform_conditions = (
-        (result_df['box_range'] <= box_threshold) & 
-        (result_df['ma_diff'] <= ma_diff_threshold) &
-        (result_df['volatility'] <= volatility_threshold) &
-        (result_df['volume_ratio'] <= volume_factor)
+    # 创建配置对象（在循环外部创建一次，而不是每次循环都创建）
+    config = ScanConfig(
+        windows=[80, 100, 120],
+        expected_count=10,
+        box_threshold=0.3,
+        ma_diff_threshold=0.25,
+        volatility_threshold=0.4,
+        use_volume_analysis=True,
+        volume_change_threshold=0.5,
+        volume_stability_threshold=0.5,
+        volume_increase_threshold=1.5,
+        use_technical_indicators=False,
+        use_breakthrough_prediction=True,
+        use_low_position=False,
+        high_point_lookback_days=365,
+        decline_period_days=180,
+        decline_threshold=0.3,
+        use_rapid_decline_detection=True,
+        rapid_decline_days=30,
+        rapid_decline_threshold=0.15,
+        use_breakthrough_confirmation=False,
+        breakthrough_confirmation_days=1,
+        use_window_weights=False,
+        window_weights={},
+        use_box_detection=True,
+        box_quality_threshold=0.3,
+        use_fundamental_filter=False,
+        revenue_growth_percentile=0.3,
+        profit_growth_percentile=0.3,
+        roe_percentile=0.3,
+        liability_percentile=0.3,
+        pe_percentile=0.7,
+        pb_percentile=0.7,
+        fundamental_years_to_check=3
     )
     
-    # 将满足条件的日期标记为平台期
-    result_df.loc[platform_conditions, 'status'] = 1
+    # 确保window_weights不为None（analyze_stock函数可能期望一个字典而不是None）
+    if config.window_weights is None:
+        config.window_weights = {}
     
-    # 清理中间计算列
-    drop_columns = ['rolling_high', 'rolling_low', 'box_range', 'ma_diff', 
-                    'returns', 'volatility', 'avg_volume', 'prev_avg_volume', 'volume_ratio']
-    result_df = result_df.drop(columns=drop_columns, errors='ignore')
+    # 遍历DataFrame，为每一天判断是否处于平台期
+    for i in range(min_window, len(result_df)):
+        # 为当前日期创建一个包含足够历史数据的窗口
+        # 向前取min_window天的数据
+        window_start = max(0, i - min_window + 1)
+        window_data = result_df.iloc[window_start:i+1].copy()
+        
+        # 使用analyze_stock方法分析这个窗口的数据
+        try:
+            # 根据analyze_stock函数的参数顺序传入配置值
+            analysis_result = analyze_stock(
+                window_data,
+                windows=config.windows,
+                box_threshold=config.box_threshold,
+                ma_diff_threshold=config.ma_diff_threshold,
+                volatility_threshold=config.volatility_threshold,
+                volume_change_threshold=config.volume_change_threshold,
+                volume_stability_threshold=config.volume_stability_threshold,
+                volume_increase_threshold=config.volume_increase_threshold,
+                use_volume_analysis=config.use_volume_analysis,
+                use_breakthrough_prediction=config.use_breakthrough_prediction,
+                use_window_weights=config.use_window_weights,
+                window_weights=config.window_weights,
+                use_low_position=config.use_low_position,
+                high_point_lookback_days=config.high_point_lookback_days,
+                decline_period_days=config.decline_period_days,
+                decline_threshold=config.decline_threshold,
+                use_rapid_decline_detection=config.use_rapid_decline_detection,
+                rapid_decline_days=config.rapid_decline_days,
+                rapid_decline_threshold=config.rapid_decline_threshold,
+                use_breakthrough_confirmation=config.use_breakthrough_confirmation,
+                breakthrough_confirmation_days=config.breakthrough_confirmation_days,
+                use_box_detection=config.use_box_detection,
+                box_quality_threshold=config.box_quality_threshold
+            )
+            
+            # 如果分析结果表明处于平台期，则将当前日期的status置为1
+            if analysis_result.get('is_platform', False):
+                result_df.iloc[i, result_df.columns.get_loc('status')] = 1
+        except Exception as e:
+            # 如果分析过程中出现错误，保持status为0
+            print(f"分析出错: {e}")
+            continue
     
     return result_df
 
@@ -224,7 +259,7 @@ def scan_all_stocks():
 
 if __name__ == '__main__':
   # scan_all_stocks()
-  code = 'sh.600000'
+  code = 'sz.000882'
   start_date = '2020-08-27'
   end_date = '2025-08-25'
   scan_test_stock(code, start_date, end_date)
